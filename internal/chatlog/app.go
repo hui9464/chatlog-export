@@ -827,6 +827,15 @@ func (a *App) initMenu() {
 					a.mainPages.AddPage("modal", modal, true, true)
 					a.SetFocus(modal)
 
+					defer func() {
+						if r := recover(); r != nil {
+							a.QueueUpdateDraw(func() {
+								modal.SetText(fmt.Sprintf("导出异常: %v", r))
+								modal.AddButtons([]string{"OK"})
+							})
+						}
+					}()
+
 					// 在后台执行导出操作
 					go func() {
 						// 获取所有图片
