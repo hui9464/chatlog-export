@@ -816,6 +816,186 @@ func (a *App) initMenu() {
 				},
 			})
 
+			// 导出所有图片
+			subMenu.AddItem(&menu.Item{
+				Index:       4, // 设置一个唯一的索引
+				Name:        "导出所有图片",
+				Description: "导出微信数据库中的所有图片",
+				Selected: func(i *menu.Item) {
+					// 显示导出中的模态框
+					modal := tview.NewModal().SetText("正在导出图片...")
+					a.mainPages.AddPage("modal", modal, true, true)
+					a.SetFocus(modal)
+
+					// 在后台执行导出操作
+					go func() {
+						// 获取所有图片
+						images, err := export.GetMediaFiles(a.m.db, "image", func(current, total int) {
+							percentage := float64(current) / float64(total) * 100
+							width := 20 // 进度条宽度
+							completed := int(float64(width) * float64(current) / float64(total))
+							remaining := width - completed
+
+							// 构建进度条
+							progressBar := fmt.Sprintf("正在导出图片\n\n[%s%s] %.1f%%\n(%d/%d)",
+								strings.Repeat("█", completed),
+								strings.Repeat("░", remaining),
+								percentage,
+								current,
+								total)
+
+							a.QueueUpdateDraw(func() {
+								modal.SetText(progressBar)
+							})
+						})
+						if err != nil {
+							// 在主线程中更新UI
+							a.QueueUpdateDraw(func() {
+								modal.SetText("导出图片失败: " + err.Error())
+								modal.AddButtons([]string{"OK"})
+								modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+									a.mainPages.RemovePage("modal")
+								})
+								a.SetFocus(modal)
+							})
+							return
+						}
+
+						// 导出图片到指定目录
+						outputDir := fmt.Sprintf("wechat_images_%s", time.Now().Format("20060102_150405"))
+						if err := export.ExportMediaFiles(images, outputDir, "image", func(current, total int) {
+							percentage := float64(current) / float64(total) * 100
+							width := 20 // 进度条宽度
+							completed := int(float64(width) * float64(current) / float64(total))
+							remaining := width - completed
+
+							// 构建进度条
+							progressBar := fmt.Sprintf("正在导出图片\n\n[%s%s] %.1f%%\n(%d/%d)",
+								strings.Repeat("█", completed),
+								strings.Repeat("░", remaining),
+								percentage,
+								current,
+								total)
+
+							a.QueueUpdateDraw(func() {
+								modal.SetText(progressBar)
+							})
+						}); err != nil {
+							// 在主线程中更新UI
+							a.QueueUpdateDraw(func() {
+								modal.SetText("导出图片失败: " + err.Error())
+								modal.AddButtons([]string{"OK"})
+								modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+									a.mainPages.RemovePage("modal")
+								})
+								a.SetFocus(modal)
+							})
+							return
+						}
+
+						// 在主线程中更新UI
+						a.QueueUpdateDraw(func() {
+							modal.SetText(fmt.Sprintf("图片导出成功\n文件已保存到: %s", outputDir))
+							modal.AddButtons([]string{"OK"})
+							modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+								a.mainPages.RemovePage("modal")
+							})
+							a.SetFocus(modal)
+						})
+					}()
+				},
+			})
+
+			// 导出所有视频
+			subMenu.AddItem(&menu.Item{
+				Index:       5, // 设置一个唯一的索引
+				Name:        "导出所有视频",
+				Description: "导出微信数据库中的所有视频",
+				Selected: func(i *menu.Item) {
+					// 显示导出中的模态框
+					modal := tview.NewModal().SetText("正在导出视频...")
+					a.mainPages.AddPage("modal", modal, true, true)
+					a.SetFocus(modal)
+
+					// 在后台执行导出操作
+					go func() {
+						// 获取所有视频
+						videos, err := export.GetMediaFiles(a.m.db, "video", func(current, total int) {
+							percentage := float64(current) / float64(total) * 100
+							width := 20 // 进度条宽度
+							completed := int(float64(width) * float64(current) / float64(total))
+							remaining := width - completed
+
+							// 构建进度条
+							progressBar := fmt.Sprintf("正在导出视频\n\n[%s%s] %.1f%%\n(%d/%d)",
+								strings.Repeat("█", completed),
+								strings.Repeat("░", remaining),
+								percentage,
+								current,
+								total)
+
+							a.QueueUpdateDraw(func() {
+								modal.SetText(progressBar)
+							})
+						})
+						if err != nil {
+							// 在主线程中更新UI
+							a.QueueUpdateDraw(func() {
+								modal.SetText("导出视频失败: " + err.Error())
+								modal.AddButtons([]string{"OK"})
+								modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+									a.mainPages.RemovePage("modal")
+								})
+								a.SetFocus(modal)
+							})
+							return
+						}
+
+						// 导出视频到指定目录
+						outputDir := fmt.Sprintf("wechat_videos_%s", time.Now().Format("20060102_150405"))
+						if err := export.ExportMediaFiles(videos, outputDir, "video", func(current, total int) {
+							percentage := float64(current) / float64(total) * 100
+							width := 20 // 进度条宽度
+							completed := int(float64(width) * float64(current) / float64(total))
+							remaining := width - completed
+
+							// 构建进度条
+							progressBar := fmt.Sprintf("正在导出视频\n\n[%s%s] %.1f%%\n(%d/%d)",
+								strings.Repeat("█", completed),
+								strings.Repeat("░", remaining),
+								percentage,
+								current,
+								total)
+
+							a.QueueUpdateDraw(func() {
+								modal.SetText(progressBar)
+							})
+						}); err != nil {
+							// 在主线程中更新UI
+							a.QueueUpdateDraw(func() {
+								modal.SetText("导出视频失败: " + err.Error())
+								modal.AddButtons([]string{"OK"})
+								modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+									a.mainPages.RemovePage("modal")
+								})
+								a.SetFocus(modal)
+							})
+							return
+						}
+
+						// 在主线程中更新UI
+						a.QueueUpdateDraw(func() {
+							modal.SetText(fmt.Sprintf("视频导出成功\n文件已保存到: %s", outputDir))
+							modal.AddButtons([]string{"OK"})
+							modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+								a.mainPages.RemovePage("modal")
+							})
+							a.SetFocus(modal)
+						})
+					}()
+				},
+			})
+
 			a.mainPages.AddPage("submenu", subMenu, true, true)
 			a.SetFocus(subMenu)
 		},
