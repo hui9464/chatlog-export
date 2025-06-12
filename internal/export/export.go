@@ -4,9 +4,12 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"github.com/sjzar/chatlog/pkg/util/dat2img"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -295,20 +298,23 @@ func exportCSV(messages []*model.Message, outputPath string, progress ProgressCa
 	return nil
 }
 
-// MediaFile 表示一个媒体文件（如图片或视频）
-type MediaFile struct {
+// MsgMediaExport 媒体消息（如图片或视频）
+type MsgMediaExport struct {
 	ID         int64     `json:"id"`         // 文件ID
 	Type       string    `json:"type"`       // 文件类型（image, video等）
 	Path       string    `json:"path"`       // 文件路径
 	Size       int64     `json:"size"`       // 文件大小（字节）
 	CreateTime time.Time `json:"createTime"` // 创建时间
+
+	Msg   *model.Message `json:"msg"`   // 消息
+	Media *model.Media   `json:"media"` // 媒体信息
 }
 
 // GetMediaFiles 用于从数据库中获取特定类型的媒体文件
 func GetMediaFiles(db interface {
 	GetMessages(startTime, endTime time.Time, talker, sender, content string, offset, limit int) ([]*model.Message, error)
 	GetContacts(keyword string, offset, limit int) (*wechatdb.GetContactsResp, error)
-}, mediaType string, progress ProgressCallback) ([]MediaFile, error) {
+}, mediaType string, progress ProgressCallback) ([]MsgMediaExport, error) {
 	// 实现具体的数据库查询逻辑
 	// 如果没有指定媒体类型，默认获取所有类型的媒体文件
 	if mediaType == "" {
@@ -326,6 +332,8 @@ func GetMediaFiles(db interface {
 		return nil, fmt.Errorf("unsupported media type: %s", mediaType)
 	}
 
+	fmt.Println(msgType)
+
 	// 获取所有联系人
 	contacts, err := db.GetContacts("", 0, 0)
 	if err != nil {
@@ -338,7 +346,7 @@ func GetMediaFiles(db interface {
 	}
 
 	// 获取所有符合条件的媒体文件
-	var mediaFiles []MediaFile
+	var mediaFiles []MsgMediaExport
 	totalContacts := len(contacts.Items)
 
 	for i, contact := range contacts.Items {
@@ -361,16 +369,31 @@ func GetMediaFiles(db interface {
 
 		// 遍历消息，筛选出指定类型的媒体文件
 		for _, msg := range messages {
-			if msg.Type == msgType {
-				mediaFile := MediaFile{
-					ID:         msg.Seq,
-					Type:       mediaType,
-					Path:       msg.Content,             // 假设Content字段包含文件路径
-					Size:       int64(len(msg.Content)), // 假设Content字段包含文件内容
-					CreateTime: msg.Time,
+
+			var filePath string
+			if mediaType == "image" {
+				// 优先使用 imgfile，回退到 MD5
+				if imgfile, ok := msg.Contents["imgfile"].(string); ok && imgfile != "" {
+					filePath = imgfile
+				} else if md5, ok := msg.Contents["md5"].(string); ok && md5 != "" {
+					filePath = md5
 				}
-				mediaFiles = append(mediaFiles, mediaFile)
+			} else if mediaType == "video" {
+				// 类似处理视频文件
+				if videofile, ok := msg.Contents["videofile"].(string); ok && videofile != "" {
+					filePath = videofile
+				}
 			}
+
+			mediaFile := MsgMediaExport{
+				ID:         msg.Seq,
+				Type:       mediaType,
+				Path:       filePath,                // 假设Content字段包含文件路径
+				Size:       int64(len(msg.Content)), // 假设Content字段包含文件内容
+				CreateTime: msg.Time,
+			}
+			mediaFiles = append(mediaFiles, mediaFile)
+
 		}
 	}
 
@@ -386,35 +409,177 @@ func GetMediaFiles(db interface {
 	return mediaFiles, nil
 }
 
-// ExportMediaFiles 将媒体文件导出到指定目录
-func ExportMediaFiles(mediaFiles []MediaFile, outputDir, mediaType string, progress ProgressCallback) error {
+// GetGroupMediaFiles 获取指定群聊的媒体文件
+func GetGroupMediaFiles(db interface {
+	GetMessages(startTime, endTime time.Time, talker, sender, content string, offset, limit int) ([]*model.Message, error)
+	GetContacts(keyword string, offset, limit int) (*wechatdb.GetContactsResp, error)
+	GetMedia(_type string, key string) (*model.Media, error)
+}, talker string, mediaType int, progress func(current int, total int, msg any)) ([]*MsgMediaExport, error) {
+	// 如果没有指定媒体类型，默认获取所有类型的媒体文件
+	if mediaType == 0 {
+		return nil, fmt.Errorf("media type must be specified")
+	}
+
+	// 根据不同的媒体类型定义消息类型
+	var msgType int64
+	switch mediaType {
+	case TypeImage:
+		msgType = TypeImage // 图片消息类型
+	case TypeVideo:
+		msgType = TypeVideo // 视频消息类型
+	default:
+		return nil, fmt.Errorf("unsupported media type: %s", mediaType)
+	}
+
+	// 设置时间范围
+	startTime := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
+	endTime := time.Date(2025, time.December, 30, 23, 59, 59, 0, time.UTC)
+
+	// 获取该群聊的聊天记录
+	messages, err := db.GetMessages(startTime, endTime, talker, "", "", 0, 0)
+	if err != nil {
+		log.Error().Err(err).Str("contact", talker).Msg("failed to get group messages")
+		return nil, err
+	}
+
+	// 创建一个新的切片，只包含指定类型的消息
+	newMessages := make([]*model.Message, 0)
+	// 过滤掉非指定类型的消息
+	for _, msg := range messages {
+		if msg.Type == msgType {
+			newMessages = append(newMessages, msg)
+		}
+	}
+
+	// 遍历消息，筛选出指定类型的媒体文件
+	var mediaFiles []*MsgMediaExport
+	for i, msg := range newMessages {
+		var filePath string
+		if msg.Type == msgType {
+			// 优先使用 imgfile，回退到 MD5
+			if imgfile, ok := msg.Contents["imgfile"].(string); ok && imgfile != "" {
+				filePath = imgfile
+			} else if md5, ok := msg.Contents["md5"].(string); ok && md5 != "" {
+				filePath = md5
+			}
+		} else if msg.Type == msgType {
+			// 类似处理视频文件
+			if videofile, ok := msg.Contents["videofile"].(string); ok && videofile != "" {
+				filePath = videofile
+			}
+		}
+
+		// 查询媒体
+		media, err := db.GetMedia("image", filePath)
+		if err != nil {
+			// 忽略错误
+			continue
+			//return nil, errors.New(err, 1, fmt.Sprintf("Err: %+v, msg: %+v", err, msg.Contents))
+		}
+
+		m := &MsgMediaExport{
+			ID:         0,
+			Type:       "",
+			Path:       "",
+			Size:       0,
+			CreateTime: time.Time{},
+			Msg:        msg,
+			Media:      media,
+		}
+
+		mediaFiles = append(mediaFiles, m)
+
+		// 更新进度：获取聊天列表的进度
+		if progress != nil {
+			progress(i+1, len(newMessages), fmt.Sprintf("%+v", media))
+		}
+	}
+
+	if len(mediaFiles) == 0 {
+		return nil, fmt.Errorf("no media files found in the specified group")
+	}
+
+	return mediaFiles, nil
+}
+
+// MediaFilesExport 将媒体文件导出到指定目录
+func MediaFilesExport(mediaFiles []*MsgMediaExport, dataDir, outputDir, mediaType string, progress ProgressCallback) error {
 	// 创建输出目录
 	if err := os.MkdirAll(outputDir, os.ModePerm); err != nil {
-		return err
+		return fmt.Errorf("创建输出目录失败: %w", err)
 	}
 
 	total := len(mediaFiles)
+	if total == 0 {
+		return nil // 空列表直接返回
+	}
 
 	// 遍历并复制每个文件
 	for i, mediaFile := range mediaFiles {
-		// 构建源文件路径和目标文件路径
-		srcPath := mediaFile.Path
-		fileExt := ".unknown"
-		switch mediaType {
-		case "image":
-			fileExt = ".jpg" // 假设图片为JPG格式
-		case "video":
-			fileExt = ".mp4" // 假设视频为MP4格式
-		}
-		dstPath := filepath.Join(outputDir, fmt.Sprintf("%d%s", mediaFile.ID, fileExt))
-
-		// 复制文件
-		if err := copyFile(srcPath, dstPath); err != nil {
-			return err
+		if mediaFile == nil {
+			continue // 跳过空对象
 		}
 
-		// 调用进度回调
-		if progress != nil && (i%10 == 0 || i == total-1) { // 每处理10个文件或最后一条记录更新一次进度
+		// 检查源文件路径
+		absolutePath := filepath.Join(dataDir, mediaFile.Path)
+		if _, err := os.Stat(absolutePath); os.IsNotExist(err) {
+			return fmt.Errorf("源文件不存在: %s", absolutePath)
+		}
+
+		// 获取源文件扩展名
+		ext := strings.ToLower(filepath.Ext(absolutePath))
+
+		// 提取年月信息并构建目录
+		yearDir := filepath.Join(outputDir, strconv.Itoa(mediaFile.Msg.Time.Year()))
+		monthDir := filepath.Join(yearDir, strconv.Itoa(int(mediaFile.Msg.Time.Month())))
+
+		// 创建年月目录
+		if err := os.MkdirAll(monthDir, os.ModePerm); err != nil {
+			return fmt.Errorf("创建年月目录失败: %w", err)
+		}
+
+		switch {
+		case ext == ".dat":
+			// 处理.dat文件
+			b, err := os.ReadFile(absolutePath)
+			if err != nil {
+				return fmt.Errorf("无法读取文件: %s", absolutePath)
+			}
+
+			// 转换为图片(获取真实文件、扩展名)
+			dat2Out, dat2Ext, err := dat2img.Dat2Image(b)
+			if err != nil {
+				return fmt.Errorf("无法转换文件: %s", absolutePath)
+			}
+
+			// 构建目标路径
+			dstPath := filepath.Join(monthDir, fmt.Sprintf("%s.%s", mediaFile.Media.Key, dat2Ext))
+
+			// 写入文件
+			if err = os.WriteFile(dstPath, dat2Out, os.ModePerm); err != nil {
+				return fmt.Errorf("无法保存文件 %s: %w", dstPath, err)
+			}
+		default:
+			// 原始文件直接复制
+			srcPath := absolutePath
+			// 构建目标路径（包含年月目录）
+			dstPath := filepath.Join(monthDir, fmt.Sprintf("%s%s", mediaFile.Media.Key, ext))
+
+			// 复制文件并处理错误
+			if err := copyFile(srcPath, dstPath); err != nil {
+				return fmt.Errorf("文件复制失败 %s -> %s: %w", srcPath, dstPath, err)
+			}
+		}
+
+		//dstPath := filepath.Join(outputDir, fmt.Sprintf("%s%s", mediaFile.Key, fileExt))
+		//
+		//// 复制文件并处理错误
+		//if err := copyFile(srcPath, dstPath); err != nil {
+		//	return fmt.Errorf("文件复制失败 %s -> %s: %w", srcPath, dstPath, err)
+		//}
+
+		// 调用进度回调（每处理10个文件或最后一条记录更新一次进度）
+		if progress != nil && (i%10 == 0 || i == total-1) {
 			progress(i+1, total)
 		}
 	}
