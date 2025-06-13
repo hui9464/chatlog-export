@@ -99,7 +99,7 @@ var exportCmd = &cobra.Command{
 		// 获取聊天记录
 		fmt.Println("正在导出聊天记录")
 		fmt.Println("正在获取消息列表...")
-		messages, err := export.GetMessagesForExport(db, startTime, endTime, exportTalker, false, func(current, total int) {
+		messages, err := export.GetMessagesForExport(db, startTime, endTime, exportTalker, false, func(current, total int, msg any) {
 			percentage := float64(current) / float64(total) * 100
 			width := 30 // 进度条宽度
 			completed := int(float64(width) * float64(current) / float64(total))

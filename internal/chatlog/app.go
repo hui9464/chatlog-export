@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -458,7 +459,7 @@ func (a *App) initMenu() {
 					// 在后台执行导出操作
 					go func() {
 						// 获取所有消息
-						messages, err := export.GetMessagesForExport(a.m.db, time.Time{}, time.Time{}, "", false, func(current, total int) {
+						messages, err := export.GetMessagesForExport(a.m.db, time.Time{}, time.Time{}, "", false, func(current, total int, msg any) {
 							percentage := float64(current) / float64(total) * 100
 							width := 20 // 进度条宽度
 							completed := int(float64(width) * float64(current) / float64(total))
@@ -547,7 +548,7 @@ func (a *App) initMenu() {
 					// 在后台执行导出操作
 					go func() {
 						// 获取所有消息
-						messages, err := export.GetMessagesForExport(a.m.db, time.Time{}, time.Time{}, "", false, func(current, total int) {
+						messages, err := export.GetMessagesForExport(a.m.db, time.Time{}, time.Time{}, "", false, func(current, total int, msg any) {
 							percentage := float64(current) / float64(total) * 100
 							width := 20 // 进度条宽度
 							completed := int(float64(width) * float64(current) / float64(total))
@@ -645,7 +646,7 @@ func (a *App) initMenu() {
 							// 在后台执行导出操作
 							go func() {
 								// 获取所有消息
-								messages, err := export.GetMessagesForExport(a.m.db, time.Time{}, time.Time{}, "", true, func(current, total int) {
+								messages, err := export.GetMessagesForExport(a.m.db, time.Time{}, time.Time{}, "", true, func(current, total int, msg any) {
 									percentage := float64(current) / float64(total) * 100
 									width := 20 // 进度条宽度
 									completed := int(float64(width) * float64(current) / float64(total))
@@ -735,7 +736,7 @@ func (a *App) initMenu() {
 							// 在后台执行导出操作
 							go func() {
 								// 获取所有消息
-								messages, err := export.GetMessagesForExport(a.m.db, time.Time{}, time.Time{}, "", true, func(current, total int) {
+								messages, err := export.GetMessagesForExport(a.m.db, time.Time{}, time.Time{}, "", true, func(current, total int, msg any) {
 									percentage := float64(current) / float64(total) * 100
 									width := 20 // 进度条宽度
 									completed := int(float64(width) * float64(current) / float64(total))
@@ -820,7 +821,7 @@ func (a *App) initMenu() {
 			//subMenu.AddItem(&menu.Item{
 			//	Index:       4, // 设置一个唯一的索引
 			//	Name:        "导出所有图片",
-			//	Description: "导出微信数据库中的所有图片",
+			//	Description: "导出当前账号的数据库中的所有图片",
 			//	Selected: func(i *menu.Item) {
 			//		// 显示导出中的模态框
 			//		modal := tview.NewModal().SetText("正在导出图片...")
@@ -914,100 +915,173 @@ func (a *App) initMenu() {
 			//		}()
 			//	},
 			//})
-			//
-			//// 导出所有视频
-			//subMenu.AddItem(&menu.Item{
-			//	Index:       5, // 设置一个唯一的索引
-			//	Name:        "导出所有视频",
-			//	Description: "导出微信数据库中的所有视频",
-			//	Selected: func(i *menu.Item) {
-			//		// 显示导出中的模态框
-			//		modal := tview.NewModal().SetText("正在导出视频...")
-			//		a.mainPages.AddPage("modal", modal, true, true)
-			//		a.SetFocus(modal)
-			//
-			//		// 在后台执行导出操作
-			//		go func() {
-			//			// 获取所有视频
-			//			videos, err := export.GetMediaFiles(a.m.db, "video", func(current, total int) {
-			//				percentage := float64(current) / float64(total) * 100
-			//				width := 20 // 进度条宽度
-			//				completed := int(float64(width) * float64(current) / float64(total))
-			//				remaining := width - completed
-			//
-			//				// 构建进度条
-			//				progressBar := fmt.Sprintf("正在导出视频\n\n[%s%s] %.1f%%\n(%d/%d)",
-			//					strings.Repeat("█", completed),
-			//					strings.Repeat("░", remaining),
-			//					percentage,
-			//					current,
-			//					total)
-			//
-			//				a.QueueUpdateDraw(func() {
-			//					modal.SetText(progressBar)
-			//				})
-			//			})
-			//			if err != nil {
-			//				// 在主线程中更新UI
-			//				a.QueueUpdateDraw(func() {
-			//					modal.SetText("导出视频失败: " + err.Error())
-			//					modal.AddButtons([]string{"OK"})
-			//					modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-			//						a.mainPages.RemovePage("modal")
-			//					})
-			//					a.SetFocus(modal)
-			//				})
-			//				return
-			//			}
-			//
-			//			// 导出视频到指定目录
-			//			outputDir := fmt.Sprintf("wechat_videos_%s", time.Now().Format("20060102_150405"))
-			//			if err := export.MediaFilesExport(videos, outputDir, "video", func(current, total int) {
-			//				percentage := float64(current) / float64(total) * 100
-			//				width := 20 // 进度条宽度
-			//				completed := int(float64(width) * float64(current) / float64(total))
-			//				remaining := width - completed
-			//
-			//				// 构建进度条
-			//				progressBar := fmt.Sprintf("正在导出视频\n\n[%s%s] %.1f%%\n(%d/%d)",
-			//					strings.Repeat("█", completed),
-			//					strings.Repeat("░", remaining),
-			//					percentage,
-			//					current,
-			//					total)
-			//
-			//				a.QueueUpdateDraw(func() {
-			//					modal.SetText(progressBar)
-			//				})
-			//			}); err != nil {
-			//				// 在主线程中更新UI
-			//				a.QueueUpdateDraw(func() {
-			//					modal.SetText("导出视频失败: " + err.Error())
-			//					modal.AddButtons([]string{"OK"})
-			//					modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-			//						a.mainPages.RemovePage("modal")
-			//					})
-			//					a.SetFocus(modal)
-			//				})
-			//				return
-			//			}
-			//
-			//			// 在主线程中更新UI
-			//			a.QueueUpdateDraw(func() {
-			//				modal.SetText(fmt.Sprintf("视频导出成功\n文件已保存到: %s", outputDir))
-			//				modal.AddButtons([]string{"OK"})
-			//				modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-			//					a.mainPages.RemovePage("modal")
-			//				})
-			//				a.SetFocus(modal)
-			//			})
-			//		}()
-			//	},
-			//})
+
+			// 导出微信媒体文件
+			subMenu.AddItem(&menu.Item{
+				Index:       6, // 设置一个唯一的索引
+				Name:        "导出微信媒体文件",
+				Description: "导出微信的所有媒体文件到当前运行目录",
+				Selected: func(i *menu.Item) {
+					// 创建输入表单
+					formView := form.NewForm("导出媒体")
+
+					var talker, mediaType string
+
+					// 添加输入字段 - 输入聊天ID
+					formView.AddInputField("聊天ID", "", 0, nil, func(text string) {
+						talker = text // 存储输入的聊天ID
+					})
+
+					// 添加输入字段 - 输入媒体类型(默认图片和视频) 0图片和视频 3图片 34语音 43视频 6文件
+					formView.AddInputField("媒体类型", "0", 0, nil, func(text string) {
+						mediaType = text // 存储输入的输入媒体类型
+					})
+
+					// 添加按钮 - 点击保存时开始导出
+					formView.AddButton("导出", func() {
+						//// 如果没有输入聊天ID，显示错误提示
+						//if talker == "" {
+						//	a.showError(fmt.Errorf("请输入群聊ID"))
+						//	return
+						//}
+
+						a.mainPages.RemovePage("submenu2")
+
+						// 提示文本
+						tips := ""
+						switch {
+						case mediaType == "3":
+							tips = "正在导出图片" + "..."
+						case mediaType == "34":
+							tips = "正在导出语音" + "..."
+						case mediaType == "43":
+							tips = "正在导出视频" + "..."
+						case mediaType == "6":
+							tips = "正在导出文件" + "..."
+						default:
+							tips = "正在导出图片和视频" + "..."
+						}
+
+						// 显示导出中的模态框
+						modal := tview.NewModal().SetText(tips)
+						a.mainPages.AddPage("modal", modal, true, true)
+						a.SetFocus(modal)
+
+						// 在后台执行导出操作
+						go func() {
+							// 获取指定聊天数据
+							images, err := export.GetMessagesForExport(a.m.db, time.Time{}, time.Time{}, talker, false, func(current, total int, msg any) {
+								percentage := float64(current) / float64(total) * 100
+								width := 20 // 进度条宽度
+								completed := int(float64(width) * float64(current) / float64(total))
+								remaining := width - completed
+
+								// 构建进度条
+								progressBar := fmt.Sprintf("%s\n\n[%s%s] %.1f%%\n(%d/%d)\n 处理: %+v",
+									tips,
+									strings.Repeat("█", completed),
+									strings.Repeat("░", remaining),
+									percentage,
+									current,
+									total,
+									msg,
+								)
+
+								a.QueueUpdateDraw(func() {
+									modal.SetText(progressBar)
+								})
+							})
+							if err != nil {
+								// 在主线程中更新UI
+								a.QueueUpdateDraw(func() {
+									modal.SetText(fmt.Sprintf("%s失败: %+v", tips, err.Error()))
+									modal.AddButtons([]string{"OK"})
+									modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+										a.mainPages.RemovePage("modal")
+									})
+									a.SetFocus(modal)
+								})
+								return
+							}
+
+							mediaTypeInt64, err := strconv.ParseInt(mediaType, 10, 64)
+							if err != nil {
+								// 转换失败，默认导出图片和视频
+								mediaTypeInt64 = 0
+							}
+
+							msgMedias, err := export.GetMessageMedia(a.m.db, mediaTypeInt64, images...)
+							if err != nil {
+								// 在主线程中更新UI
+								a.QueueUpdateDraw(func() {
+									modal.SetText(fmt.Sprintf("%s失败: %+v", "获取媒体信息", err.Error()))
+									modal.AddButtons([]string{"OK"})
+									modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+										a.mainPages.RemovePage("modal")
+									})
+									a.SetFocus(modal)
+								})
+								return
+							}
+
+							// 导出图片到指定目录
+							outputDir := fmt.Sprintf("wechat_media_%s_%s", mediaType, time.Now().Format("20060102_150405"))
+							if err = export.MediaFilesExport(msgMedias, a.ctx.DataDir, outputDir, "image", func(current, total int) {
+								percentage := float64(current) / float64(total) * 100
+								width := 20 // 进度条宽度
+								completed := int(float64(width) * float64(current) / float64(total))
+								remaining := width - completed
+
+								// 构建进度条
+								progressBar := fmt.Sprintf("%s\n\n[%s%s] %.1f%%\n(%d/%d)",
+									tips,
+									strings.Repeat("█", completed),
+									strings.Repeat("░", remaining),
+									percentage,
+									current,
+									total)
+
+								a.QueueUpdateDraw(func() {
+									modal.SetText(progressBar)
+								})
+							}); err != nil {
+								// 在主线程中更新UI
+								a.QueueUpdateDraw(func() {
+									modal.SetText("导出图片失败: " + err.Error())
+									modal.AddButtons([]string{"OK"})
+									modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+										a.mainPages.RemovePage("modal")
+									})
+									a.SetFocus(modal)
+								})
+								return
+							}
+
+							// 在主线程中更新UI
+							a.QueueUpdateDraw(func() {
+								modal.SetText(fmt.Sprintf("图片导出成功\n文件已保存到: %s", outputDir))
+								modal.AddButtons([]string{"OK"})
+								modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+									a.mainPages.RemovePage("modal")
+								})
+								a.SetFocus(modal)
+							})
+						}()
+					})
+
+					// 添加取消按钮
+					formView.AddButton("取消", func() {
+						a.mainPages.RemovePage("submenu2")
+					})
+
+					a.mainPages.AddPage("submenu2", formView, true, true)
+					a.SetFocus(formView)
+				},
+			})
 
 			// 添加导出群聊图片菜单项
 			subMenu.AddItem(&menu.Item{
-				Index:       6, // 设置一个唯一的索引
+				Index:       7, // 设置一个唯一的索引
 				Name:        "导出群聊图片",
 				Description: "导出指定群聊的所有图片",
 				Selected: func(i *menu.Item) {
